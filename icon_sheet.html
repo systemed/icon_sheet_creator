@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Icon Sheet Creator</title>
+	<style>
+		html,body { padding: 0; margin: 0; font-family: "Avenir Next","Avenir","Helvetica Neue","Helvetica",sans-serif; }
+		#header { width: 100%; position: absolute; top: 0; height: 30px; background-color: #88C; color: white; padding: 2px 8px; }
+		#header span { margin-right: 10px; }
+		#header input[type='number'] { width: 40px; }
+		#content { width: 100%; position: absolute; top: 30px; height: calc(100% - 30px); background-color: white; }
+		#content.hovering { border: 4px dashed gray; box-sizing: border-box; }
+
+		#canvas { }
+		#tempcanvas { display: none; }
+	</style>
+</head>
+<body>
+	<div id="header">
+		<span><b>Icon Sheet Creator</b></span>
+		<span>Width: <input type='number' id='widthInput' value='64'></span>
+		<span>Height: <input type='number' id='heightInput' value='64'></span>
+		<span>Filename: <input type='text' id='nameInput' value='icons'></span>
+		<span>Download: 
+			<button type='button' onclick='download1x()'>1x</button>
+			<button type='button' onclick='download2x()'>2x</button>
+			<button type='button' onclick='download1xJSON()'>1xJSON</button>
+			<button type='button' onclick='download2xJSON()'>2xJSON</button>
+		</span>
+		<span><button type='button' onclick='clearCanvas()'>Clear</button></span>
+	</div>
+	<div id='content' ondrop='fileDropped(event)' ondragover='fileDragOver(event)' ondragleave='fileDragLeave(event)'>
+		<canvas id="canvas"></canvas>
+		<canvas id="tempcanvas"></canvas>
+	</div>
+<script>
+	var targetWidth, targetHeight;
+	var canvas = byId("canvas");
+	canvas.width  = 512; canvas.style.width = canvas.width +"px";
+	canvas.height = 512; canvas.style.height= canvas.height+"px";
+	var x=0, y=0, rowHeight=0;
+	var icons = {};
+	function byId(id) { return document.getElementById(id); }
+	function fileDropped(event) {
+		targetWidth  = byId('widthInput' ).value;
+		targetHeight = byId('heightInput').value;
+		event.preventDefault();
+		byId("content").className="";
+		Array.from(event.dataTransfer.files).forEach (file => {
+			loadSVG(file);
+		});
+	}
+	function fileDragOver(event) {
+		event.preventDefault();
+		byId("content").className="hovering";
+	}
+	function fileDragLeave(event) {
+		byId("content").className="";
+	}
+	async function loadSVG(file) {
+		let fn,ext,name,width,height;
+		[fn,ext] = file.name.split('.');
+		[name,width,height] = fn.split('|');
+		var img = new Image();
+		img.src = URL.createObjectURL(file, { type: "image/svg+xml" });
+		img.onload = (event => {
+			const ctx = canvas.getContext('2d');
+			ctx.imageSmoothingEnabled = true;
+			ctx.imageSmoothingQuality = "high";
+			// Scale width and height to fit in the desired bounds (unless overridden in filename)
+			if (width && !height) height=width*(img.height/img.width);
+			const tw = Number(width  || targetWidth );
+			const th = Number(height || targetHeight);
+			const ratio = Math.max(img.width/tw, img.height/th);
+			const w = Math.round(img.width /ratio/2)*2;	// we need a multiple of 2 because of retina icons
+			const h = Math.round(img.height/ratio/2)*2;
+			if (x+w > canvas.width) { x=0; y+=rowHeight; rowHeight=0 }
+			if (y+h > canvas.height) { alert("Canvas too short"); } // should resize
+			// Store details in icon sheet
+			icons[name] = { "width": w, "height": h, "x": x, "y": y, "pixelRatio": 2 };
+			// Draw and move onto next position
+			ctx.drawImage(img, x,y, w,h);
+			x+=w
+			rowHeight = Math.max(rowHeight,h);
+		});
+	}
+	function clearCanvas() {
+		const ctx = canvas.getContext('2d');
+		ctx.clearRect(0,0,canvas.width,canvas.height);
+		icons = {};
+	}
+
+	// Download icon sheets and JSON indexes
+	function downloadFile(blob,suffix) {
+		const n = byId("nameInput").value;
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(blob);
+		a.download = n+suffix;
+		a.click();
+	  	URL.revokeObjectURL(a.href);
+	}
+	function download2x() {
+		canvas.toBlob(blob => { downloadFile(blob, "@2x.png") });
+	}
+	function download1x() {
+		const half= byId("tempcanvas");
+		half.width = canvas.width /2; half.style.width = half.width +"px";
+		half.height= canvas.height/2; half.style.height= half.height+"px";
+		const htx = half.getContext('2d');
+		htx.drawImage(canvas, 0,0, canvas.width,canvas.height, 0,0, half.width,half.height);
+		half.toBlob(blob => { downloadFile(blob, ".png") });
+	}
+	function download2xJSON() {
+		downloadFile(new Blob([JSON.stringify(icons,null,2)], { type: "application/json" }), "@2x.json");
+	}
+	function download1xJSON() {
+		var half = {};
+		Object.keys(icons).forEach(k => {
+			const v = icons[k];
+			half[k] = { "width": v.width/2, "height": v.height/2, "x": v.x/2, "y": v.y/2, "pixelRatio": 1 };
+		});
+		downloadFile(new Blob([JSON.stringify(half,null,2)], { type: "application/json" }), ".json");
+	}
+</script>
+</body>
+</html>
