@@ -57,9 +57,17 @@
 		byId("content").className="";
 	}
 	async function loadSVG(file) {
-		let fn,ext,name,width,height;
+		let fn, ext, extras = {};
 		[fn,ext] = file.name.split('.');
-		[name,width,height] = fn.split('|');
+		let args = fn.split('|');
+		let name = args.shift(), width = args.shift(), height = args.shift();
+		for (const param of args) {
+			const s = param.split(',');
+			const v = s.slice(1).map(n => Number(n));
+			if (s[0]=='c') { extras.content = v; }
+			if (s[0]=='x') { extras.stretchX= v.flatMap((_, i, a) => i % 2 ? [] : [a.slice(i, i + 2)]); }
+			if (s[0]=='y') { extras.stretchY= v.flatMap((_, i, a) => i % 2 ? [] : [a.slice(i, i + 2)]); }
+		}
 		var img = new Image();
 		img.src = URL.createObjectURL(file, { type: "image/svg+xml" });
 		img.onload = (event => {
@@ -76,7 +84,7 @@
 			if (x+w > canvas.width) { x=0; y+=rowHeight; rowHeight=0 }
 			if (y+h > canvas.height) { alert("Canvas too short"); } // should resize
 			// Store details in icon sheet
-			icons[name] = { "width": w, "height": h, "x": x, "y": y, "pixelRatio": 2 };
+			icons[name] = { "width": w, "height": h, "x": x, "y": y, "pixelRatio": 2, ...extras };
 			// Draw and move onto next position
 			ctx.drawImage(img, x,y, w,h);
 			x+=w
@@ -87,6 +95,7 @@
 		const ctx = canvas.getContext('2d');
 		ctx.clearRect(0,0,canvas.width,canvas.height);
 		icons = {};
+		x=0; y=0; rowHeight=0;
 	}
 
 	// Download icon sheets and JSON indexes
@@ -117,6 +126,9 @@
 		Object.keys(icons).forEach(k => {
 			const v = icons[k];
 			half[k] = { "width": v.width/2, "height": v.height/2, "x": v.x/2, "y": v.y/2, "pixelRatio": 1 };
+			if (v.content ) { half[k].content  = v.content.map(n => n/2); }
+			if (v.stretchX) { half[k].stretchX = v.stretchX.map(n => [n[0]/2,n[1]/2]); }
+			if (v.stretchY) { half[k].stretchY = v.stretchY.map(n => [n[0]/2,n[1]/2]); }
 		});
 		downloadFile(new Blob([JSON.stringify(half,null,2)], { type: "application/json" }), ".json");
 	}
